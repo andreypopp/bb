@@ -1,0 +1,14 @@
+srcdir = $projectdir/bin
+builddir = $projectdir/_b/_/bin
+rule stage
+  command = cp $in $out
+rule ocamlopt
+  command = ocamlopt.opt -g -I $builddir -I +unix -c $in
+rule ocamlmkexe
+  command = ocamlopt.opt -g -I $builddir -I +unix unix.cmxa $in -o $out
+build $builddir/build_ocamldep.ml : stage $srcdir/build_ocamldep.ml
+build $builddir/build_ocamldep.cmx | $builddir/build_ocamldep.cmi $builddir/build_ocamldep.o : ocamlopt $builddir/build_ocamldep.ml
+build $builddir/build_ocamldep.exe : ocamlmkexe $builddir/build_ocamldep.cmx
+build $builddir/build_ocamlorder.ml : stage $srcdir/build_ocamlorder.ml
+build $builddir/build_ocamlorder.cmx | $builddir/build_ocamlorder.cmi $builddir/build_ocamlorder.o : ocamlopt $builddir/build_ocamlorder.ml
+build $builddir/build_ocamlorder.exe : ocamlmkexe $builddir/build_ocamlorder.cmx

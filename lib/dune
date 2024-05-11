@@ -1,0 +1,8 @@
+(library
+  (name bb)
+  (modes byte)
+  (libraries unix compiler-libs.toplevel))
+
+(toplevel
+  (name bb)
+  (libraries bb))
