@@ -26,11 +26,8 @@ module Ocaml = struct
     let ocamlfind_pkgs = String.concat " " ocamlfind_pkgs in
     Ninja.rule out "stage" ~command:"cp $in $out";
     Ninja.rule out "ocamldep"
-      ~command:
-        "$projectdir/_b/_/bin/build_ocamldep.exe $objdir $in -I $builddir > \
-         $out";
-    Ninja.rule out "ocamldep_order"
-      ~command:"$projectdir/_b/_/bin/build_ocamlorder.exe $in > $out";
+      ~command:"bb ocamldep --objdir $objdir -I $builddir $in > $out";
+    Ninja.rule out "ocamldep_order" ~command:"bb ocamlorder $in > $out";
     Ninja.rule out "ocamlopt"
       ~command:(sf "ocamlopt.opt -g -I $objdir %s -c $in -o $out" cflags);
     Ninja.rule out "ocamlmkexe"
@@ -61,18 +58,11 @@ module Ocaml = struct
   let p_ocamlfind_lflags = P.(objdir / v "ocamlfind.lflags")
   let link_order n = P.(objdir / vf "%s.order" n)
   let stage out p = Ninja.build out "stage" (p_stage p) ~inp:[ p_src p ]
-
-  let ocamldep out p =
-    let tool = P.(projectdir / v "_b/_/bin/build_ocamldep.exe") in
-    Ninja.build out "ocamldep" (p_dep p)
-      ~inp:[ p_stage p ]
-      ~implicit_inp:[ tool ]
+  let ocamldep out p = Ninja.build out "ocamldep" (p_dep p) ~inp:[ p_stage p ]
 
   let ocamldep_order out n srcs =
-    let tool = P.(projectdir / v "_b/_/bin/build_ocamlorder.exe") in
     let deps = List.map p_dep srcs in
     Ninja.build out "ocamldep_order" (link_order n) ~inp:deps
-      ~implicit_inp:[ tool ]
 
   let ocamlopt ~deps out p =
     Ninja.build out "ocamlopt" (p_cmx p)
@@ -189,7 +179,6 @@ module Project = struct
   let gen_rules t out =
     Ninja.set_path out "projectdir" t.proj_path;
     Ninja.set_path out "builddir" P.(projectdir / v "_b");
-    Ninja.subninja out P.(projectdir / v "bin/build.ninja");
     let ninja_build p =
       let p = P.relative ~to_:t.proj_path p in
       P.(builddir / p / v "build.ninja")

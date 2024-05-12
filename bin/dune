@@ -1,0 +1,5 @@
+(executable
+  (name bb)
+  (public_name bb)
+  (package bb)
+  (libraries unix cmdliner))
