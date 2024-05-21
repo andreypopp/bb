@@ -1,3 +1,7 @@
+module P = Bb_lib.P
+
+let commandf = Printf.ksprintf (fun s -> if 0 <> Sys.command s then exit 1)
+
 let ocamldep objdir includes mls =
   let to_obj path =
     match objdir with
@@ -87,6 +91,21 @@ let ocamlorder args =
     in
     Seq.iter visit (Hashtbl.to_seq_values t)
 
+let build_ninja = function
+  | Some dir -> P.(dir / v "_b" / v "build.ninja")
+  | None -> P.v "_b/build.ninja"
+
+let build dir =
+  Option.iter
+    (fun (dir : P.t) ->
+      let dir = P.resolve dir in
+      print_endline (Printf.sprintf "chdir: %s" (P.relative dir :> string));
+      Sys.chdir (dir :> string))
+    dir;
+  commandf "ninja -f %s" (build_ninja dir :> string)
+
+let clean dir = commandf "ninja -f %s -t clean" (build_ninja dir :> string)
+
 open Cmdliner
 
 let objdir_t =
@@ -100,6 +119,15 @@ let mls_t =
 let ds_t =
   let doc = "files in ninja dyndep format" in
   Arg.(non_empty & pos_all string [] & info [] ~docv:"FILE" ~doc)
+
+let path =
+  let parse s = Ok (P.v s) in
+  let print ppf (s : P.t) = Format.pp_print_string ppf (s :> string) in
+  Arg.conv (parse, print)
+
+let root_t =
+  let doc = "project root" in
+  Arg.(value & opt (some path) None & info [ "root"; "R" ] ~docv:"DIR" ~doc)
 
 let include_t =
   let doc = "include directory" in
@@ -117,9 +145,21 @@ let ocamlorder_t =
   let term = Term.(const ocamlorder $ ds_t) in
   Cmd.v info term
 
+let build_t =
+  let doc = "run build" in
+  let info = Cmd.info "build" ~doc in
+  let term = Term.(const build $ root_t) in
+  Cmd.v info term
+
+let clean_t =
+  let doc = "clean built artefacts" in
+  let info = Cmd.info "clean" ~doc in
+  let term = Term.(const clean $ root_t) in
+  Cmd.v info term
+
 let main_t =
   let doc = "bb (Blitzbau), a build system" in
   let info = Cmd.info "bb" ~doc in
-  Cmd.group info [ ocamldep_t; ocamlorder_t ]
+  Cmd.group info [ build_t; clean_t; ocamldep_t; ocamlorder_t ]
 
 let () = Cmdliner.(exit @@ Cmd.eval main_t)

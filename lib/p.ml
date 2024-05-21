@@ -36,5 +36,6 @@ let relative ?to_ p =
   else p
 
 let dirname p = Filename.dirname p
+let basename p = Filename.basename p
 
 module Set = Set.Make (String)

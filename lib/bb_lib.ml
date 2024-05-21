@@ -24,7 +24,7 @@ module Ocaml = struct
     let cflags = String.concat " " cflags in
     let lflags = String.concat " " lflags in
     let ocamlfind_pkgs = String.concat " " ocamlfind_pkgs in
-    Ninja.rule out "stage" ~command:"cp $in $out";
+    Ninja.rule out "copy" ~command:"cp $in $out";
     Ninja.rule out "ocamldep"
       ~command:"bb ocamldep --objdir $objdir -I $builddir $in > $out";
     Ninja.rule out "ocamldep_order" ~command:"bb ocamlorder $in > $out";
@@ -57,7 +57,7 @@ module Ocaml = struct
   let p_ocamlfind_cflags = P.(objdir / v "ocamlfind.cflags")
   let p_ocamlfind_lflags = P.(objdir / v "ocamlfind.lflags")
   let link_order n = P.(objdir / vf "%s.order" n)
-  let stage out p = Ninja.build out "stage" (p_stage p) ~inp:[ p_src p ]
+  let stage out p = Ninja.build out "copy" (p_stage p) ~inp:[ p_src p ]
   let ocamldep out p = Ninja.build out "ocamldep" (p_dep p) ~inp:[ p_stage p ]
 
   let ocamldep_order out n srcs =
@@ -125,10 +125,17 @@ module Lib = struct
   }
   (** invariant: path should be relative to projectdir *)
 
+  let srcdir' path = P.(projectdir / path)
+  let srcdir t = srcdir' t.path
+  let builddir' path = P.(projectdir / v "_b" / path)
+  let builddir t = builddir' t.path
+  let archive t = P.(projectdir / v "_b" / t.path / vf "%s.cmxa" t.name)
+  let objdir t = P.(projectdir / v "_b" / t.path / v "_ocaml")
+
   let gen_rules' ~path ~name ~deps ~cflags ~lflags ~srcs ~link_ocamlfind_pkgs
       out =
-    Ninja.set_path out "srcdir" P.(projectdir / path);
-    Ninja.set_path out "builddir" P.(projectdir / v "_b" / path);
+    Ninja.set_path out "srcdir" (srcdir' path);
+    Ninja.set_path out "builddir" (builddir' path);
     let deps, ocamlfind_pkgs =
       List.partition_map
         (function
@@ -141,14 +148,17 @@ module Lib = struct
       ~srcs;
     Ocaml.ocamldep_order out name srcs
 
-  let gen_rules { path; name; srcs; cflags; lflags; deps } out =
-    gen_rules' ~path ~name ~deps ~cflags ~lflags ~srcs
+  let gen_rules ({ path; name; srcs; cflags; lflags; deps } as t) out =
+    gen_rules' ~path ~name ~deps ~cflags:("-opaque" :: cflags) ~lflags ~srcs
       ~link_ocamlfind_pkgs:false out;
     let cmxa = Ocaml.ocamlmklib out name srcs in
+    List.iter
+      (fun src ->
+        let cmi = Ocaml.p_cmi src in
+        let cmi' = P.(builddir t / basename cmi) in
+        Ninja.build out "copy" cmi' ~inp:[ cmi ])
+      srcs;
     Ninja.phony out (P.(path / vf "%s.cmxa" name) :> string) [ cmxa ]
-
-  let archive t = P.(projectdir / v "_b" / t.path / vf "%s.cmxa" t.name)
-  let objdir t = P.(projectdir / v "_b" / t.path / v "_ocaml")
 end
 
 module Exe = struct
@@ -216,10 +226,10 @@ module Project = struct
             | `lib name ->
                 let lib = find_lib proj name in
                 resolve state proj (lib.path, lib.deps);
-                let objdir = Lib.objdir lib in
+                let builddir = Lib.builddir lib in
                 let archive = Lib.archive lib in
                 state.deps <- `path archive :: state.deps;
-                state.cflags <- sf "-I %s" (objdir :> string) :: state.cflags;
+                state.cflags <- sf "-I %s" (builddir :> string) :: state.cflags;
                 state.archives <- archive :: state.archives)
           deps)
 
